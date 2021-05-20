@@ -116,8 +116,6 @@ section '.code' code readable executable
                 add esi, edi
                 xor ecx, ecx
 
-                xor ecx, ecx
-
         searchProcAddr:
                 inc ecx
                 lodsd
